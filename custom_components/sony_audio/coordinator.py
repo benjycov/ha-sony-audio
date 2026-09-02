@@ -54,12 +54,14 @@ class SonyAudioCoordinator(DataUpdateCoordinator[SonyAudioData]):
     async def _async_update_data(self) -> SonyAudioData:
         """Fetch receiver and zone state."""
         try:
-            power, zones, volumes, inputs, sound_settings = await asyncio.gather(
-                self.device.get_power(),
-                self.device.get_zones(),
-                self.device.get_volume_information(),
-                self.device.get_inputs(),
-                self.device.get_sound_settings(),
+            power, zones, volumes, sources_by_output, sound_settings = (
+                await asyncio.gather(
+                    self.device.get_power(),
+                    self.device.get_zones(),
+                    self.device.get_volume_information(),
+                    self._async_get_sources(),
+                    self.device.get_sound_settings(),
+                )
             )
 
             playback_results = await asyncio.gather(
@@ -75,11 +77,7 @@ class SonyAudioCoordinator(DataUpdateCoordinator[SonyAudioData]):
             zip(zones, playback_results, strict=True)
         ):
             volume = volumes_by_output.get(zone.uri)
-            allowed_sources = tuple(
-                SonySource(source.title, source.uri, source)
-                for source in inputs
-                if source.outputs and zone.uri in source.outputs
-            )
+            allowed_sources = sources_by_output.get(zone.uri, ())
             zone_states[zone.uri] = SonyZoneState(
                 title=zone.title,
                 uri=zone.uri,
@@ -125,6 +123,62 @@ class SonyAudioCoordinator(DataUpdateCoordinator[SonyAudioData]):
             return None
         return functions[0].uri if functions else None
 
+    async def _async_get_sources(self) -> dict[str, tuple[SonySource, ...]]:
+        """Return external and internal sources grouped by valid output."""
+        sources_by_output: dict[str, dict[str, SonySource]] = {}
+
+        external_inputs = await self.device.get_inputs()
+        for source in external_inputs:
+            sony_source = SonySource(source.title, source.uri, source)
+            for output in source.outputs or ():
+                sources_by_output.setdefault(output, {})[source.uri] = sony_source
+
+        av_content = self.device.services["avContent"]
+        try:
+            schemes = await av_content["getSchemeList"]()
+            get_source_list = av_content["getSourceList"]
+        except (KeyError, SongpalException, TimeoutError) as ex:
+            _LOGGER.debug("Unable to read internal source schemes: %s", ex)
+            return {
+                output: tuple(sources.values())
+                for output, sources in sources_by_output.items()
+            }
+
+        if get_source_list.supports_version("1.2"):
+            get_source_list.use_version("1.2")
+
+        internal_results = await asyncio.gather(
+            *(
+                self._async_get_scheme_sources(get_source_list, item["scheme"])
+                for item in schemes
+                if item.get("scheme") != "extInput"
+            )
+        )
+        for internal_sources in internal_results:
+            for source in internal_sources:
+                uri = source.get("source")
+                title = source.get("title")
+                if not source.get("isPlayable") or not uri or not title:
+                    continue
+                sony_source = SonySource(title, uri, source)
+                for output in source.get("outputs") or ():
+                    sources_by_output.setdefault(output, {})[uri] = sony_source
+
+        return {
+            output: tuple(sources.values())
+            for output, sources in sources_by_output.items()
+        }
+
+    async def _async_get_scheme_sources(
+        self, method: Any, scheme: str
+    ) -> list[dict[str, Any]]:
+        """Return sources for one Sony playback scheme."""
+        try:
+            return await method(scheme=scheme)
+        except (SongpalException, TimeoutError) as ex:
+            _LOGGER.debug("Unable to read sources for scheme %s: %s", scheme, ex)
+            return []
+
     def zone(self, uri: str) -> SonyZoneState:
         """Return the current state for a zone."""
         return self.data.zones[uri]
@@ -160,7 +214,9 @@ class SonyAudioCoordinator(DataUpdateCoordinator[SonyAudioData]):
         source = next((item for item in zone.sources if item.title == title), None)
         if source is None:
             raise SongpalException(f"Source {title!r} is not valid for {zone.title}")
-        await source.native.activate(zone.native)
+        await self.device.services["avContent"]["setPlayContent"](
+            uri=source.uri, output=zone.uri
+        )
         await self.async_request_refresh()
 
     async def async_select_sound_mode(self, title: str) -> None:
