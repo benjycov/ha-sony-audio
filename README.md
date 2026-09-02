@@ -23,6 +23,15 @@ validation.
 
 ## Installation
 
+### HACS
+
+1. In HACS, open the menu and choose **Custom repositories**.
+2. Add `https://github.com/benjycov/ha-sony-audio` as an **Integration**.
+3. Install **Sony Audio**, then restart Home Assistant.
+4. Add **Sony Audio** from Settings > Devices & services.
+
+### Manual
+
 Copy `custom_components/sony_audio` into the Home Assistant configuration directory,
 restart Home Assistant, then add **Sony Audio** from Settings > Devices & services.
 
