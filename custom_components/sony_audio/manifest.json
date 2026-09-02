@@ -1,0 +1,19 @@
+{
+  "domain": "sony_audio",
+  "name": "Sony Audio",
+  "codeowners": ["@benjycov"],
+  "config_flow": true,
+  "documentation": "https://github.com/benjycov/ha-sony-audio",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/benjycov/ha-sony-audio/issues",
+  "loggers": ["songpal"],
+  "requirements": ["python-songpal==0.16.2"],
+  "ssdp": [
+    {
+      "manufacturer": "Sony Corporation",
+      "st": "urn:schemas-sony-com:service:ScalarWebAPI:1"
+    }
+  ],
+  "version": "0.1.0"
+}

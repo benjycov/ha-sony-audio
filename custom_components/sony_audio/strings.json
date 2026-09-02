@@ -1,0 +1,27 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This receiver is already configured",
+      "cannot_connect": "Failed to connect to the receiver",
+      "not_supported": "This Sony device is not supported"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect"
+    },
+    "flow_title": "{name} ({host})",
+    "step": {
+      "confirm": {
+        "description": "Set up the discovered Sony receiver?"
+      },
+      "user": {
+        "data": {
+          "endpoint": "Sony Scalar API endpoint"
+        },
+        "data_description": {
+          "endpoint": "Usually http://RECEIVER_IP:10000/sony"
+        },
+        "description": "Enter the Sony Audio Control API endpoint."
+      }
+    }
+  }
+}
